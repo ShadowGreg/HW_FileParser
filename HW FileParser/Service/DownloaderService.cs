@@ -1,10 +1,11 @@
 using System.Collections.Concurrent;
-using HW_FileParser.Entities;
 using HW_FileParser.Entities.DTO;
+using HW_FileParser.Entities.Enums;
+using HW_FileParser.Service.Abstractions;
 
 namespace HW_FileParser.Service;
 public class DownloaderService(
-    IDataContext dataContext
+    IEventBus eventBus
 ): IDownloaderService
 {
     private string _outputPath = "C:/downloadPicture/";
@@ -56,16 +57,18 @@ public class DownloaderService(
             await File.WriteAllBytesAsync(outputFile, fileBytes, ct);
             end = TimeProvider.System.GetLocalNow();
             var downloadSpeed = FormatSpeed((long)totalFileSize!, (end - begin).TotalSeconds);
+            var compleetDownloadResault = new DownloadResult {
+                                                                 Url = url,
+                                                                 FilePath = outputFile,
+                                                                 BeginTime = begin,
+                                                                 EndTime = end,
+                                                                 FileSize = (long)totalFileSize,
+                                                                 AVGDownloadSpeed = downloadSpeed,
+                                                                 Status = nameof(Status.Success)
+                                                             };
 
-            return new DownloadResult {
-                                          Url = url,
-                                          FilePath = outputFile,
-                                          BeginTime = begin,
-                                          EndTime = end,
-                                          FileSize = (long)totalFileSize,
-                                          AVGDownloadSpeed = downloadSpeed,
-                                          Status = nameof(Status.Success)
-                                      };
+            await eventBus.PublishAsync(compleetDownloadResault);
+            return compleetDownloadResault;
 
         }
         catch (OperationCanceledException e) {
