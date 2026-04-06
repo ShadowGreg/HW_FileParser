@@ -1,6 +1,12 @@
-@HW_FileParser_HostAddress = http://localhost:5013
-
-GET {{HW_FileParser_HostAddress}}/weatherforecast/
-Accept: application/json
+Вот правильный HTTP-запрос для твоего контроллера:
 
 ###
+POST http://localhost:5013/FileDownload
+Content-Type: application/json
+
+{
+  "urls": [
+    "https://cdn-edge.kwork.ru/pics/t3/11/24395091-63b1895383785.jpg",
+    "https://example.com/file2.txt"
+  ]
+}
