@@ -24,7 +24,11 @@ public class DownloaderService(
         CancellationToken ct) {
         var outputPath = _serviceOptions.OutputPath;
         ConcurrentBag<DownloadResult> results = [];
-        var parallelOptions = new ParallelOptions { MaxDegreeOfParallelism = -1, CancellationToken = ct };
+        var maxConcurrent = Math.Max(1, _serviceOptions.MaxConcurrentDownloads);
+        var parallelOptions = new ParallelOptions {
+            MaxDegreeOfParallelism = maxConcurrent,
+            CancellationToken = ct
+        };
        
         var httpClientName = _serviceOptions.ClientName;
         var client = httpClientFactory.CreateClient(httpClientName);

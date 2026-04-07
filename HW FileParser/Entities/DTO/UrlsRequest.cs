@@ -14,12 +14,12 @@ public sealed record UrlsRequest: IValidatableObject
             yield break;
         }
 
-        int maxConnections = validationContext.GetRequiredService<IOptions<DownloaderServiceOptions>>().Value
-                                              .MaxConnections;
+        int maxUrls = validationContext.GetRequiredService<IOptions<DownloaderServiceOptions>>().Value
+                                       .MaxUrlsPerRequest;
 
-        if (Urls.Count > maxConnections) {
+        if (Urls.Count > maxUrls) {
             yield return new ValidationResult(
-                $"Не более {maxConnections} URL за один запрос.",
+                $"Не более {maxUrls} URL за один запрос.",
                 [nameof(Urls)]);
         }
     }

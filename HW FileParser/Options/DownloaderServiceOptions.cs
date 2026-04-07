@@ -7,4 +7,6 @@ public class DownloaderServiceOptions
     public int Retry { get; set; } = 2;
     public string ClientName { get; set; } = "DownloaderClient";
     public int MaxConnections { get; set; } = 100;
+    public int MaxUrlsPerRequest { get; set; } = 100;
+    public int MaxConcurrentDownloads { get; set; } = 8;
 }
