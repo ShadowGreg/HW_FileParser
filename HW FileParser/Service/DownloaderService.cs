@@ -43,6 +43,10 @@ public class DownloaderService(
                 parallelOptions,
                 async (address, token) =>
                     {
+                        if (token.IsCancellationRequested) {
+                            return;
+                        }
+
                         try {
                             var result = await DownloadFileAsync(client, address, outputPath, requestId, token);
                             results.Add(result);
@@ -59,7 +63,7 @@ public class DownloaderService(
                                 Status: nameof(Status.Failed),
                                 ErrorMSG: ex.Message,
                                 RequestId: requestId);
-                            await eventBus.PublishAsync(failed);
+                            await eventBus.PublishAsync(failed, CancellationToken.None);
                             results.Add(failed);
                         }
                     });
@@ -136,7 +140,7 @@ public class DownloaderService(
                 ErrorMSG: "",
                 RequestId: requestId);
 
-            await eventBus.PublishAsync(completedDownloadResult);
+            await eventBus.PublishAsync(completedDownloadResult, CancellationToken.None);
             return completedDownloadResult;
 
         }
@@ -156,7 +160,7 @@ public class DownloaderService(
                 Status: nameof(Status.Cancelled),
                 ErrorMSG: message,
                 RequestId: requestId);
-            await eventBus.PublishAsync(cancelled);
+            await eventBus.PublishAsync(cancelled, CancellationToken.None);
             return cancelled;
         }
         catch (FileSizeException e) {
@@ -173,7 +177,7 @@ public class DownloaderService(
                 Status: nameof(Status.Failed),
                 ErrorMSG: e.Message,
                 RequestId: requestId);
-            await eventBus.PublishAsync(failed);
+            await eventBus.PublishAsync(failed, CancellationToken.None);
             return failed;
         }
         catch (Exception e) {
@@ -190,7 +194,7 @@ public class DownloaderService(
                 Status: nameof(Status.Failed),
                 ErrorMSG: e.Message,
                 RequestId: requestId);
-            await eventBus.PublishAsync(failed);
+            await eventBus.PublishAsync(failed, CancellationToken.None);
             return failed;
         }
     }

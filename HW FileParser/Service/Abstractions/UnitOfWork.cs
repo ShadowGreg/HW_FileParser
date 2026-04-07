@@ -5,7 +5,7 @@ using HW_FileParser.Entities.DTO;
 namespace HW_FileParser.Service.Abstractions;
 public class UnitOfWork(AppDataContext context): IDataContext
 {
-    public async Task<Guid> WriteDataAsync(DownloadResult downloadResult) {
+    public async Task<Guid> WriteDataAsync(DownloadResult downloadResult, CancellationToken ct = default) {
         var id = Guid.NewGuid();
         var downloadData = new DownloadData() {
                                                   Id = id,
@@ -21,7 +21,7 @@ public class UnitOfWork(AppDataContext context): IDataContext
                                               };
 
         context.DownloadDatas.Add(downloadData);
-        await context.SaveChangesAsync();
+        await context.SaveChangesAsync(ct);
 
         return id;
     }
