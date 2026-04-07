@@ -24,34 +24,48 @@ public class DownloaderService(
         CancellationToken ct) {
         var outputPath = _serviceOptions.OutputPath;
         ConcurrentBag<DownloadResult> results = [];
-        var options = new ParallelOptions { CancellationToken = ct };
+        var parallelOptions = new ParallelOptions { MaxDegreeOfParallelism = -1, CancellationToken = ct };
+       
         var httpClientName = _serviceOptions.ClientName;
         var client = httpClientFactory.CreateClient(httpClientName);
         var requestId = addresses.RequestId;
-        await Parallel.ForEachAsync(addresses.Urls,
-            options,
-            async (address, token) =>
-                {
-                    try {
-                        var result = await DownloadFileAsync(client, address, outputPath, requestId, token);
-                        results.Add(result);
-                    }
-                    catch (Exception ex) {
-                        Console.WriteLine(ex);
-                        var failed = new DownloadResult(
-                            Url: address,
-                            FilePath: outputPath,
-                            BeginTime: TimeProvider.System.GetLocalNow(),
-                            EndTime: TimeProvider.System.GetLocalNow(),
-                            FileSize: 0,
-                            AVGDownloadSpeed: "",
-                            Status: nameof(Status.Failed),
-                            ErrorMSG: ex.Message,
-                            RequestId: requestId);
-                        await eventBus.PublishAsync(failed);
-                        results.Add(failed);
-                    }
-                });
+
+        using (logger.BeginScope(new Dictionary<string, object?> {
+                   ["RequestId"] = requestId,
+                   ["UrlCount"] = addresses.Urls.Count
+               })) {
+            logger.LogInformation(
+                "Download batch started: {UrlCount} URLs, MaxDegreeOfParallelism {MaxDegree}",
+                addresses.Urls.Count,
+                parallelOptions.MaxDegreeOfParallelism);
+
+            await Parallel.ForEachAsync(addresses.Urls,
+                parallelOptions,
+                async (address, token) =>
+                    {
+                        try {
+                            var result = await DownloadFileAsync(client, address, outputPath, requestId, token);
+                            results.Add(result);
+                        }
+                        catch (Exception ex) {
+                            logger.LogError(ex, "Parallel download failed for {Url}", address);
+                            var failed = new DownloadResult(
+                                Url: address,
+                                FilePath: outputPath,
+                                BeginTime: TimeProvider.System.GetLocalNow(),
+                                EndTime: TimeProvider.System.GetLocalNow(),
+                                FileSize: 0,
+                                AVGDownloadSpeed: "",
+                                Status: nameof(Status.Failed),
+                                ErrorMSG: ex.Message,
+                                RequestId: requestId);
+                            await eventBus.PublishAsync(failed);
+                            results.Add(failed);
+                        }
+                    });
+
+            logger.LogInformation("Download batch finished: {ResultCount} results", results.Count);
+        }
 
         return results;
     }
@@ -111,7 +125,7 @@ public class DownloaderService(
 
             end = TimeProvider.System.GetLocalNow();
             var downloadSpeed = FormatSpeed(totalFileSize, (end - begin).TotalSeconds);
-            var compleetDownloadResault = new DownloadResult(
+            var completedDownloadResult = new DownloadResult(
                 Url: url,
                 FilePath: filePath,
                 BeginTime: begin,
@@ -122,8 +136,8 @@ public class DownloaderService(
                 ErrorMSG: "",
                 RequestId: requestId);
 
-            await eventBus.PublishAsync(compleetDownloadResault);
-            return compleetDownloadResault;
+            await eventBus.PublishAsync(completedDownloadResult);
+            return completedDownloadResult;
 
         }
         catch (OperationCanceledException e) {
@@ -220,11 +234,12 @@ public class DownloaderService(
             return "Average download speed: n/a";
         }
 
+        var bytesPerSecond = size / tspan;
         string message = "Average download speed: {0:N0} {1}";
-        return (size / tspan) switch {
-                   > Mb => string.Format(message, size / Mb / tspan, "MB/s"),
-                   > Kb => string.Format(message, size / Kb / tspan, "KB/s"),
-                   _ => string.Format(message, size / tspan, "B/s")
+        return bytesPerSecond switch {
+                   > Mb => string.Format(message, (double)size / Mb / tspan, "MB/s"),
+                   > Kb => string.Format(message, (double)size / Kb / tspan, "KB/s"),
+                   _ => string.Format(message, bytesPerSecond, "B/s")
                };
     }
 }

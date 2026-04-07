@@ -18,7 +18,9 @@ public sealed record UrlsRequest: IValidatableObject
                                               .MaxConnections;
 
         if (Urls.Count > maxConnections) {
-            yield return new ValidationResult("Не более 100 URL за один запрос.", [nameof(Urls)]);
+            yield return new ValidationResult(
+                $"Не более {maxConnections} URL за один запрос.",
+                [nameof(Urls)]);
         }
     }
 }

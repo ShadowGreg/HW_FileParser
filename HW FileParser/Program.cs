@@ -4,7 +4,6 @@ using HW_FileParser.Options;
 using HW_FileParser.Service;
 using HW_FileParser.Service.Abstractions;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.DependencyInjection;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Configuration.Sources.Clear();
@@ -57,7 +56,7 @@ builder.Services.AddHttpClient(downloaderOptions.ClientName,
 
 builder.Services.AddScoped<IDataContext, UnitOfWork>();
 builder.Services.AddScoped<IDownloaderService, DownloaderService>();
-builder.Services.AddTransient<IEventHandler<DownloadResult>, EventSaveDataProsessor>();
+builder.Services.AddTransient<IEventHandler<DownloadResult>, EventSaveDataProcessor>();
 builder.Services.AddSingleton<IEventBus, EventBus>();
 builder.Services.AddControllers();
 
@@ -68,10 +67,10 @@ var dbContext = scope.ServiceProvider.GetRequiredService<AppDataContext>();
 
 try {
     await dbContext.Database.MigrateAsync();
-    Console.WriteLine("✅ База данных успешно обновлена (миграции применены)");
+    app.Logger.LogInformation("Database migrations applied successfully");
 }
 catch (Exception ex) {
-    Console.WriteLine($"❌ Ошибка при применении миграций: {ex.Message}");
+    app.Logger.LogError(ex, "Failed to apply database migrations");
 }
 
 
