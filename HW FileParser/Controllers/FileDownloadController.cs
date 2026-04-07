@@ -10,8 +10,11 @@ public class FileDownloadController(IDownloaderService downloadService): Control
     [HttpPost]
     public async Task<IReadOnlyCollection<DownloadResult>> DownloadFiles(
         [FromBody] UrlsRequest addresses,
-        CancellationToken ct) 
+        CancellationToken ct)
     {
-        return await downloadService.DownloadFileAsync(addresses, ct);
+        var request = addresses with {
+            RequestId = addresses.RequestId ?? HttpContext.TraceIdentifier
+        };
+        return await downloadService.DownloadFileAsync(request, ct);
     }
 }

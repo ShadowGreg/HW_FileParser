@@ -7,12 +7,9 @@ public class AppDataContext(DbContextOptions<AppDataContext> options): DbContext
     public DbSet<DownloadData> DownloadDatas { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder) {
-        modelBuilder.Entity<DownloadData>(entity =>
-            {
+        modelBuilder.Entity<DownloadData>(entity => {
                 entity.ToTable("DownloadData");
-
-                entity.HasIndex(e => e.Id, "IX_DownloadData_Id")
-                      .IsUnique();
+                entity.HasKey(e => e.Id);
             });
     }
 }

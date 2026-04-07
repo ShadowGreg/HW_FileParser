@@ -11,12 +11,13 @@ public class UnitOfWork(AppDataContext context): IDataContext
                                                   Id = id,
                                                   Url = downloadResult.Url,
                                                   FilePath = downloadResult.FilePath,
-                                                  BeginTime = downloadResult.BeginTime?.UtcDateTime ?? DateTime.UtcNow,
-                                                  EndTime = downloadResult.EndTime?.UtcDateTime ?? DateTime.UtcNow,
+                                                  BeginTime = downloadResult.BeginTime ?? DateTimeOffset.UtcNow,
+                                                  EndTime = downloadResult.EndTime ?? DateTimeOffset.UtcNow,
                                                   FileSize = downloadResult.FileSize,
                                                   AVGDownloadSpeed = downloadResult.AVGDownloadSpeed,
                                                   Status = downloadResult.Status,
-                                                  ErrorMSG = downloadResult.ErrorMSG
+                                                  ErrorMSG = downloadResult.ErrorMSG,
+                                                  RequestId = downloadResult.RequestId
                                               };
 
         context.DownloadDatas.Add(downloadData);

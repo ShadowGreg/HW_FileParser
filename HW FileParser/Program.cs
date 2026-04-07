@@ -18,8 +18,13 @@ ConnectionStringsOptions connectionStringsOptionsOptions = new();
 builder.Configuration.GetSection(nameof(ConnectionStringsOptions))
        .Bind(connectionStringsOptionsOptions);
 
+if (string.IsNullOrWhiteSpace(connectionStringsOptionsOptions.DefaultConnection)) {
+    throw new InvalidOperationException(
+        "Задайте ConnectionStringsOptions:DefaultConnection.");
+}
+
 builder.Services.AddDbContext<AppDataContext>(options =>
-    options.UseSqlite(connectionStringsOptionsOptions.DefaultConnection));
+    options.UseNpgsql(connectionStringsOptionsOptions.DefaultConnection));
 
 builder.Services.Configure<DownloaderServiceOptions>(
     builder.Configuration.GetSection(nameof(DownloaderServiceOptions)));
