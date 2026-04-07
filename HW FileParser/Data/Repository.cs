@@ -4,7 +4,7 @@ using HW_FileParser.Models;
 
 namespace HW_FileParser.Data;
 
-public class UnitOfWork(AppDataContext context): IDataContext
+public class Repository(AppDataContext context): IRepository
 {
     public async Task<Guid> WriteDataAsync(DownloadResult downloadResult, CancellationToken ct = default) {
         var id = Guid.NewGuid();

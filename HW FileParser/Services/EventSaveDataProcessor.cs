@@ -4,7 +4,7 @@ using HW_FileParser.Models;
 namespace HW_FileParser.Services;
 
 public class EventSaveDataProcessor(
-    IDataContext db
+    IRepository db
     ): IEventHandler<DownloadResult>
 {
     public async Task<Guid> WriteDataAsync(DownloadResult downloadResult, CancellationToken ct = default) {

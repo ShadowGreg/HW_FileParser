@@ -54,7 +54,7 @@ builder.Services.AddHttpClient(downloaderOptions.ClientName,
                     t * (downloaderOptions.Retry + 1) * 2;
             });
 
-builder.Services.AddScoped<IDataContext, UnitOfWork>();
+builder.Services.AddScoped<IRepository, Repository>();
 builder.Services.AddScoped<IDownloaderService, DownloaderService>();
 builder.Services.AddTransient<IEventHandler<DownloadResult>, EventSaveDataProcessor>();
 builder.Services.AddSingleton<IEventBus, EventBus>();
