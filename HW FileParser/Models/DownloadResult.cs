@@ -1,4 +1,4 @@
-namespace HW_FileParser.Entities.DTO;
+namespace HW_FileParser.Models;
 
 public record DownloadResult(
     string? Url = null,
@@ -10,4 +10,4 @@ public record DownloadResult(
     string Status = "",
     string ErrorMSG = "",
     string? RequestId = null
-    );
+);

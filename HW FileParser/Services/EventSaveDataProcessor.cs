@@ -1,7 +1,8 @@
-using HW_FileParser.Entities.DTO;
-using HW_FileParser.Service.Abstractions;
+using HW_FileParser.Contracts;
+using HW_FileParser.Models;
 
-namespace HW_FileParser.Service;
+namespace HW_FileParser.Services;
+
 public class EventSaveDataProcessor(
     IDataContext db
     ): IEventHandler<DownloadResult>

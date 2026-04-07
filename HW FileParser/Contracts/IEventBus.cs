@@ -1,4 +1,5 @@
-namespace HW_FileParser.Service.Abstractions;
+namespace HW_FileParser.Contracts;
+
 public interface IEventBus
 {
     Task PublishAsync<TEvent>(TEvent @event, CancellationToken ct = default);

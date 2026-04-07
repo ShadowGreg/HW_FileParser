@@ -1,6 +1,7 @@
-using HW_FileParser.Entities.DTO;
+using HW_FileParser.Models;
 
-namespace HW_FileParser.Service.Abstractions;
+namespace HW_FileParser.Contracts;
+
 public interface IDownloaderService
 {
     Task<IReadOnlyCollection<DownloadResult>> DownloadFileAsync(UrlsRequest addresses, CancellationToken ct);

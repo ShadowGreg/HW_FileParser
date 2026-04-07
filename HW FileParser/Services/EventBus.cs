@@ -1,7 +1,8 @@
-using HW_FileParser.Service.Abstractions;
+using HW_FileParser.Contracts;
 using Microsoft.Extensions.Logging;
 
-namespace HW_FileParser.Service;
+namespace HW_FileParser.Services;
+
 public class EventBus(IServiceScopeFactory scopeFactory, ILogger<EventBus> logger): IEventBus
 {
     public async Task PublishAsync<TEvent>(TEvent @event, CancellationToken ct = default)

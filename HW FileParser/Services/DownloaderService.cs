@@ -1,12 +1,13 @@
 using System.Collections.Concurrent;
-using HW_FileParser.Entities.DTO;
+using HW_FileParser.Contracts;
 using HW_FileParser.Entities.Enums;
 using HW_FileParser.Exceptions;
+using HW_FileParser.Models;
 using HW_FileParser.Options;
-using HW_FileParser.Service.Abstractions;
 using Microsoft.Extensions.Options;
 
-namespace HW_FileParser.Service;
+namespace HW_FileParser.Services;
+
 public class DownloaderService(
     IEventBus eventBus,
     IHttpClientFactory httpClientFactory,

@@ -1,4 +1,5 @@
-namespace HW_FileParser.Service;
+namespace HW_FileParser.Contracts;
+
 public interface IEventHandler<TEvent>
 {
     Task HandleAsync(TEvent @event);

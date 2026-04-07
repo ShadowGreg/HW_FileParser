@@ -1,8 +1,8 @@
+using HW_FileParser.Contracts;
 using HW_FileParser.Data;
-using HW_FileParser.Entities.DTO;
+using HW_FileParser.Models;
 using HW_FileParser.Options;
-using HW_FileParser.Service;
-using HW_FileParser.Service.Abstractions;
+using HW_FileParser.Services;
 using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);

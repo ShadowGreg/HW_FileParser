@@ -1,5 +1,5 @@
-using HW_FileParser.Entities.DTO;
-using HW_FileParser.Service.Abstractions;
+using HW_FileParser.Contracts;
+using HW_FileParser.Models;
 using Microsoft.AspNetCore.Mvc;
 
 namespace HW_FileParser.Controllers;

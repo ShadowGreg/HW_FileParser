@@ -2,7 +2,8 @@ using System.ComponentModel.DataAnnotations;
 using HW_FileParser.Options;
 using Microsoft.Extensions.Options;
 
-namespace HW_FileParser.Entities.DTO;
+namespace HW_FileParser.Models;
+
 public sealed record UrlsRequest: IValidatableObject
 {
     public required IReadOnlyList<string> Urls { get; init; }

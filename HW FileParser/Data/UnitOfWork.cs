@@ -1,8 +1,9 @@
-using HW_FileParser.Data;
+using HW_FileParser.Contracts;
 using HW_FileParser.Entities;
-using HW_FileParser.Entities.DTO;
+using HW_FileParser.Models;
 
-namespace HW_FileParser.Service.Abstractions;
+namespace HW_FileParser.Data;
+
 public class UnitOfWork(AppDataContext context): IDataContext
 {
     public async Task<Guid> WriteDataAsync(DownloadResult downloadResult, CancellationToken ct = default) {
