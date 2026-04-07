@@ -1,5 +1,4 @@
 using System.Collections.Concurrent;
-using System.Text;
 using HW_FileParser.Entities.DTO;
 using HW_FileParser.Entities.Enums;
 using HW_FileParser.Exceptions;
@@ -10,6 +9,8 @@ using Microsoft.Extensions.Options;
 namespace HW_FileParser.Service;
 public class DownloaderService(
     IEventBus eventBus,
+    IHttpClientFactory httpClientFactory,
+    ILogger<DownloaderService> logger,
     IOptionsSnapshot<DownloaderServiceOptions> serviceOptionsAccessor)
     : IDownloaderService
 {
@@ -19,11 +20,13 @@ public class DownloaderService(
 
 
     public async Task<IReadOnlyCollection<DownloadResult>> DownloadFileAsync(
-        UrlsRequest addresses, CancellationToken ct) {
+        UrlsRequest addresses,
+        CancellationToken ct) {
         var outputPath = _serviceOptions.OutputPath;
         ConcurrentBag<DownloadResult> results = [];
         var options = new ParallelOptions { CancellationToken = ct };
-        using HttpClient client = new HttpClient { Timeout = TimeSpan.FromSeconds(_serviceOptions.TimeoutSeconds) };
+        var httpClientName = _serviceOptions.ClientName;
+        var client = httpClientFactory.CreateClient(httpClientName);
         var requestId = addresses.RequestId;
         await Parallel.ForEachAsync(addresses.Urls,
             options,
@@ -61,37 +64,59 @@ public class DownloaderService(
         CancellationToken ct) {
         DateTimeOffset begin = TimeProvider.System.GetLocalNow();
         DateTimeOffset end = TimeProvider.System.GetLocalNow();
-        long? totalFileSize = null;
+        long totalFileSize = 0;
+        string filePath = outputPath;
+        var maxFileSizeBytes = _serviceOptions.FileSizeMb * Mb;
         try {
-            var data = await client.GetAsync(url, ct);
-            totalFileSize = data.Content.Headers.ContentLength;
+            using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            timeoutCts.CancelAfter(TimeSpan.FromSeconds(_serviceOptions.TimeoutSeconds));
+            var token = timeoutCts.Token;
 
-            if (totalFileSize > _serviceOptions.FileSizeMb * Mb)
-                throw new FileSizeException($"Размер файла больше установленного лимита {_serviceOptions.FileSizeMb}Mb");
+            using var request = new HttpRequestMessage(HttpMethod.Get, url);
+            using var response = await client.SendAsync(
+                request,
+                HttpCompletionOption.ResponseHeadersRead,
+                token);
 
-            var fileNAme = new StringBuilder()
-                          .Append(Guid.NewGuid())
-                          .Append(data.Content.Headers.ContentDisposition!.FileName!.Trim('"').Split('.')[1])
-                          .ToString();
+            if (response.Content.Headers.ContentLength > maxFileSizeBytes)
+                throw new FileSizeException(
+                    $"Размер файла больше установленного лимита {_serviceOptions.FileSizeMb}Mb");
 
+            response.EnsureSuccessStatusCode();
+            var fileName = $"{Guid.NewGuid():N}{ResolveExtension(url, response)}".Trim('"');
 
-            if (!Directory.Exists(outputPath)) {
-                Directory.CreateDirectory(outputPath);
+            Directory.CreateDirectory(outputPath);
+            filePath = Path.Combine(outputPath, fileName);
+
+            await using var responseStream = await response.Content.ReadAsStreamAsync(token);
+            await using var fileStream = new FileStream(
+                filePath,
+                FileMode.Create,
+                FileAccess.Write,
+                FileShare.None,
+                81920,
+                useAsync: true);
+
+            var buffer = new byte[81920];
+            int read;
+            while ((read = await responseStream.ReadAsync(buffer, token)) > 0) {
+                totalFileSize += read;
+                if (totalFileSize > maxFileSizeBytes) {
+                    throw new FileSizeException(
+                        $"Размер файла больше установленного лимита {_serviceOptions.FileSizeMb}Mb");
+                }
+
+                await fileStream.WriteAsync(buffer.AsMemory(0, read), token);
             }
 
-            var filePath = Path.Combine(outputPath, fileNAme);
-        
-            byte[] fileBytes = await client.GetByteArrayAsync(url, ct);
-
-            await File.WriteAllBytesAsync(filePath, fileBytes, ct);
             end = TimeProvider.System.GetLocalNow();
-            var downloadSpeed = FormatSpeed((long)totalFileSize!, (end - begin).TotalSeconds);
+            var downloadSpeed = FormatSpeed(totalFileSize, (end - begin).TotalSeconds);
             var compleetDownloadResault = new DownloadResult(
                 Url: url,
                 FilePath: filePath,
                 BeginTime: begin,
                 EndTime: end,
-                FileSize: (long)totalFileSize,
+                FileSize: totalFileSize,
                 AVGDownloadSpeed: downloadSpeed,
                 Status: nameof(Status.Success),
                 ErrorMSG: "",
@@ -102,27 +127,34 @@ public class DownloaderService(
 
         }
         catch (OperationCanceledException e) {
+            end = TimeProvider.System.GetLocalNow();
+            var message = ct.IsCancellationRequested
+                ? e.Message
+                : $"Превышен таймаут {_serviceOptions.TimeoutSeconds}с на скачивание файла";
+
             var cancelled = new DownloadResult(
                 Url: url,
-                FilePath: outputPath,
+                FilePath: filePath,
                 BeginTime: begin,
                 EndTime: end,
-                FileSize: totalFileSize ?? 0,
+                FileSize: totalFileSize,
                 AVGDownloadSpeed: "",
                 Status: nameof(Status.Cancelled),
-                ErrorMSG: e.Message,
+                ErrorMSG: message,
                 RequestId: requestId);
             await eventBus.PublishAsync(cancelled);
             return cancelled;
         }
         catch (FileSizeException e) {
-            Console.WriteLine(e);
+            end = TimeProvider.System.GetLocalNow();
+            logger.LogWarning(e, "File size limit exceeded for url {Url}", url);
+            DeletePartialFile(filePath, outputPath);
             var failed = new DownloadResult(
                 Url: url,
-                FilePath: outputPath,
+                FilePath: filePath,
                 BeginTime: begin,
                 EndTime: end,
-                FileSize: totalFileSize ?? 0,
+                FileSize: totalFileSize,
                 AVGDownloadSpeed: "",
                 Status: nameof(Status.Failed),
                 ErrorMSG: e.Message,
@@ -131,13 +163,15 @@ public class DownloaderService(
             return failed;
         }
         catch (Exception e) {
-            Console.WriteLine(e);
+            end = TimeProvider.System.GetLocalNow();
+            logger.LogError(e, "Failed to download url {Url}", url);
+            DeletePartialFile(filePath, outputPath);
             var failed = new DownloadResult(
                 Url: url,
-                FilePath: outputPath,
+                FilePath: filePath,
                 BeginTime: begin,
                 EndTime: end,
-                FileSize: totalFileSize ?? 0,
+                FileSize: totalFileSize,
                 AVGDownloadSpeed: "",
                 Status: nameof(Status.Failed),
                 ErrorMSG: e.Message,
@@ -148,7 +182,44 @@ public class DownloaderService(
     }
 
 
+    private static void DeletePartialFile(string filePath, string outputPath) {
+        if (string.IsNullOrWhiteSpace(filePath) || filePath == outputPath || !File.Exists(filePath)) {
+            return;
+        }
+
+        File.Delete(filePath);
+    }
+
+    private static string ResolveExtension(string url, HttpResponseMessage response) {
+        var extension = Path.GetExtension(
+            response.Content.Headers.ContentDisposition?.FileNameStar
+         ?? response.Content.Headers.ContentDisposition?.FileName);
+        if (!string.IsNullOrWhiteSpace(extension)) {
+            return extension;
+        }
+
+        if (Uri.TryCreate(url, UriKind.Absolute, out var uri)) {
+            extension = Path.GetExtension(uri.AbsolutePath);
+            if (!string.IsNullOrWhiteSpace(extension)) {
+                return extension;
+            }
+        }
+
+        return response.Content.Headers.ContentType?.MediaType?.ToLowerInvariant() switch {
+                   "image/jpeg" => ".jpg",
+                   "image/png" => ".png",
+                   "image/gif" => ".gif",
+                   "text/plain" => ".txt",
+                   "application/pdf" => ".pdf",
+                   _ => string.Empty
+               };
+    }
+
     string FormatSpeed(long size, double tspan) {
+        if (tspan <= 0) {
+            return "Average download speed: n/a";
+        }
+
         string message = "Average download speed: {0:N0} {1}";
         return (size / tspan) switch {
                    > Mb => string.Format(message, size / Mb / tspan, "MB/s"),

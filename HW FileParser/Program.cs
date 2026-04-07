@@ -4,6 +4,7 @@ using HW_FileParser.Options;
 using HW_FileParser.Service;
 using HW_FileParser.Service.Abstractions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Configuration.Sources.Clear();
@@ -28,6 +29,31 @@ builder.Services.AddDbContext<AppDataContext>(options =>
 
 builder.Services.Configure<DownloaderServiceOptions>(
     builder.Configuration.GetSection(nameof(DownloaderServiceOptions)));
+var downloaderOptions = builder.Configuration
+                               .GetSection(nameof(DownloaderServiceOptions))
+                               .Get<DownloaderServiceOptions>() ?? new DownloaderServiceOptions();
+
+builder.Services.AddHttpClient(downloaderOptions.ClientName,
+            client =>
+                {
+                    client.Timeout = TimeSpan.FromSeconds(downloaderOptions.TimeoutSeconds);
+                })
+       .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler {
+                                                                            MaxConnectionsPerServer = downloaderOptions.MaxConnections,
+                                                                            PooledConnectionLifetime =
+                                                                                TimeSpan.FromMinutes(5),
+                                                                            PooledConnectionIdleTimeout =
+                                                                                TimeSpan.FromMinutes(2)
+                                                                        })
+       .AddStandardResilienceHandler(options =>
+            {
+                options.Retry.MaxRetryAttempts = downloaderOptions.Retry;
+                var t = TimeSpan.FromSeconds(downloaderOptions.TimeoutSeconds);
+                options.AttemptTimeout.Timeout = t;
+                options.CircuitBreaker.SamplingDuration = t + t; // >= 2× attempt timeout (library rule)
+                options.TotalRequestTimeout.Timeout =
+                    t * (downloaderOptions.Retry + 1) * 2;
+            });
 
 builder.Services.AddScoped<IDataContext, UnitOfWork>();
 builder.Services.AddScoped<IDownloaderService, DownloaderService>();
