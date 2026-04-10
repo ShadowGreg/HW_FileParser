@@ -6,7 +6,6 @@ using HW_FileParser.Services;
 using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
-builder.Configuration.Sources.Clear();
 
 IHostEnvironment env = builder.Environment;
 
@@ -28,6 +27,8 @@ builder.Services.AddDbContext<AppDataContext>(options =>
 
 builder.Services.Configure<DownloaderServiceOptions>(
     builder.Configuration.GetSection(nameof(DownloaderServiceOptions)));
+builder.Services.Configure<EventBusOptions>(
+    builder.Configuration.GetSection(nameof(EventBusOptions)));
 var downloaderOptions = builder.Configuration
                                .GetSection(nameof(DownloaderServiceOptions))
                                .Get<DownloaderServiceOptions>() ?? new DownloaderServiceOptions();

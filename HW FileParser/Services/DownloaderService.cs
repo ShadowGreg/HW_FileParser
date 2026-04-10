@@ -1,4 +1,3 @@
-using System.Collections.Concurrent;
 using HW_FileParser.Contracts;
 using HW_FileParser.Entities.Enums;
 using HW_FileParser.Exceptions;
@@ -17,7 +16,8 @@ public class DownloaderService(
     private readonly DownloaderServiceOptions _serviceOptions = serviceOptionsAccessor.Value;
     private const long Mb = 1024 * 1024;
     private const long Kb = 1024;
-    private const int StreamCopyBufferSize = 80 * 1000;
+
+    private const int StreamCopyBufferSize = 80 * 1024;
 
 
     public async Task<IReadOnlyCollection<DownloadResult>> DownloadFileAsync(UrlsRequest addresses,
@@ -61,21 +61,6 @@ public class DownloaderService(
         await semaphore.WaitAsync(ct);
         try {
             return await DownloadFileAsync(client, address, outputPath, requestId, ct);
-        }
-        catch (Exception ex) {
-            logger.LogError(ex, "Download failed for {Url}", address);
-            var failed = new DownloadResult(
-                Url: address,
-                FilePath: outputPath,
-                BeginTime: TimeProvider.System.GetLocalNow(),
-                EndTime: TimeProvider.System.GetLocalNow(),
-                FileSize: 0,
-                AVGDownloadSpeed: "",
-                Status: nameof(Status.Failed),
-                ErrorMSG: ex.Message,
-                RequestId: requestId);
-            await eventBus.PublishAsync(failed, CancellationToken.None);
-            return failed;
         }
         finally {
             semaphore.Release();
@@ -148,8 +133,7 @@ public class DownloaderService(
                 ErrorMSG: "",
                 RequestId: requestId);
 
-            await eventBus.PublishAsync(completedDownloadResult, CancellationToken.None);
-            return completedDownloadResult;
+            return await PublishDownloadResultAsync(completedDownloadResult, CancellationToken.None);
 
         }
         catch (OperationCanceledException e) {
@@ -168,8 +152,7 @@ public class DownloaderService(
                 Status: nameof(Status.Cancelled),
                 ErrorMSG: message,
                 RequestId: requestId);
-            await eventBus.PublishAsync(cancelled, CancellationToken.None);
-            return cancelled;
+            return await PublishDownloadResultAsync(cancelled, CancellationToken.None);
         }
         catch (FileSizeException e) {
             end = TimeProvider.System.GetLocalNow();
@@ -185,8 +168,7 @@ public class DownloaderService(
                 Status: nameof(Status.Failed),
                 ErrorMSG: e.Message,
                 RequestId: requestId);
-            await eventBus.PublishAsync(failed, CancellationToken.None);
-            return failed;
+            return await PublishDownloadResultAsync(failed, CancellationToken.None);
         }
         catch (Exception e) {
             end = TimeProvider.System.GetLocalNow();
@@ -202,8 +184,30 @@ public class DownloaderService(
                 Status: nameof(Status.Failed),
                 ErrorMSG: e.Message,
                 RequestId: requestId);
-            await eventBus.PublishAsync(failed, CancellationToken.None);
-            return failed;
+            return await PublishDownloadResultAsync(failed, CancellationToken.None);
+        }
+    }
+
+    private async Task<DownloadResult> PublishDownloadResultAsync(DownloadResult result, CancellationToken ct) {
+        try {
+            await eventBus.PublishAsync(result, ct);
+            return result;
+        }
+        catch (Exception ex) {
+            logger.LogError(ex, "Не удалось сохранить результат загрузки в БД для {Url}", result.Url);
+            var dbPart = $"Не удалось сохранить запись в БД: {ex.Message}";
+            var (status, errorMsg) = result.Status switch {
+                nameof(Status.Success) => (
+                    nameof(Status.Failed),
+                    $"Файл сохранён на диск, но метаданные не записаны. {dbPart}"),
+                nameof(Status.Cancelled) => (
+                    nameof(Status.Failed),
+                    string.IsNullOrEmpty(result.ErrorMSG) ? dbPart : $"{result.ErrorMSG} {dbPart}"),
+                _ => (
+                    nameof(Status.Failed),
+                    string.IsNullOrEmpty(result.ErrorMSG) ? dbPart : $"{result.ErrorMSG} {dbPart}")
+            };
+            return result with { Status = status, ErrorMSG = errorMsg };
         }
     }
 
@@ -249,8 +253,8 @@ public class DownloaderService(
         var bytesPerSecond = size / tspan;
         string message = "Average download speed: {0:N0} {1}";
         return bytesPerSecond switch {
-                   > Mb => string.Format(message, (double)size / Mb / tspan, "MB/s"),
-                   > Kb => string.Format(message, (double)size / Kb / tspan, "KB/s"),
+                   > Mb => string.Format(message, bytesPerSecond / Mb, "MB/s"),
+                   > Kb => string.Format(message, bytesPerSecond / Kb, "KB/s"),
                    _ => string.Format(message, bytesPerSecond, "B/s")
                };
     }
