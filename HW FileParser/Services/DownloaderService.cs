@@ -17,6 +17,7 @@ public class DownloaderService(
     private readonly DownloaderServiceOptions _serviceOptions = serviceOptionsAccessor.Value;
     private const long Mb = 1024 * 1024;
     private const long Kb = 1024;
+    private const int StreamCopyBufferSize = 80 * 1000;
 
 
     public async Task<IReadOnlyCollection<DownloadResult>> DownloadFileAsync(UrlsRequest addresses,
@@ -119,10 +120,10 @@ public class DownloaderService(
                 FileMode.Create,
                 FileAccess.Write,
                 FileShare.None,
-                81920,
+                StreamCopyBufferSize,
                 useAsync: true);
 
-            var buffer = new byte[81920];
+            var buffer = new byte[StreamCopyBufferSize];
             int read;
             while ((read = await responseStream.ReadAsync(buffer, token)) > 0) {
                 totalFileSize += read;
