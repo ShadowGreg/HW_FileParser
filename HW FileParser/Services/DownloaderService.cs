@@ -7,7 +7,6 @@ using HW_FileParser.Options;
 using Microsoft.Extensions.Options;
 
 namespace HW_FileParser.Services;
-
 public class DownloaderService(
     IEventBus eventBus,
     IHttpClientFactory httpClientFactory,
@@ -20,63 +19,66 @@ public class DownloaderService(
     private const long Kb = 1024;
 
 
-    public async Task<IReadOnlyCollection<DownloadResult>> DownloadFileAsync(
-        UrlsRequest addresses,
-        CancellationToken ct) {
+    public async Task<IReadOnlyCollection<DownloadResult>> DownloadFileAsync(UrlsRequest addresses,
+                                                                             CancellationToken ct) {
         var outputPath = _serviceOptions.OutputPath;
-        ConcurrentBag<DownloadResult> results = [];
-        var maxConcurrent = Math.Max(1, _serviceOptions.MaxConcurrentDownloads);
-        var parallelOptions = new ParallelOptions {
-            MaxDegreeOfParallelism = maxConcurrent,
-            CancellationToken = ct
-        };
-       
-        var httpClientName = _serviceOptions.ClientName;
-        var client = httpClientFactory.CreateClient(httpClientName);
+        var client = httpClientFactory.CreateClient(_serviceOptions.ClientName);
         var requestId = addresses.RequestId;
 
         using (logger.BeginScope(new Dictionary<string, object?> {
-                   ["RequestId"] = requestId,
-                   ["UrlCount"] = addresses.Urls.Count
-               })) {
+                                                                     ["RequestId"] = requestId,
+                                                                     ["UrlCount"] = addresses.Urls.Count
+                                                                 }))
             logger.LogInformation(
                 "Download batch started: {UrlCount} URLs, MaxDegreeOfParallelism {MaxDegree}",
                 addresses.Urls.Count,
-                parallelOptions.MaxDegreeOfParallelism);
+                _serviceOptions.MaxConcurrentDownloads);
 
-            await Parallel.ForEachAsync(addresses.Urls,
-                parallelOptions,
-                async (address, token) =>
-                    {
-                        if (token.IsCancellationRequested) {
-                            return;
-                        }
+        using var semaphore = new SemaphoreSlim(_serviceOptions.MaxConcurrentDownloads);
 
-                        try {
-                            var result = await DownloadFileAsync(client, address, outputPath, requestId, token);
-                            results.Add(result);
-                        }
-                        catch (Exception ex) {
-                            logger.LogError(ex, "Parallel download failed for {Url}", address);
-                            var failed = new DownloadResult(
-                                Url: address,
-                                FilePath: outputPath,
-                                BeginTime: TimeProvider.System.GetLocalNow(),
-                                EndTime: TimeProvider.System.GetLocalNow(),
-                                FileSize: 0,
-                                AVGDownloadSpeed: "",
-                                Status: nameof(Status.Failed),
-                                ErrorMSG: ex.Message,
-                                RequestId: requestId);
-                            await eventBus.PublishAsync(failed, CancellationToken.None);
-                            results.Add(failed);
-                        }
-                    });
+        var tasks = addresses.Urls.Select(address => DownloadWithThrottleAsync(
+            semaphore,
+            client,
+            address,
+            outputPath,
+            requestId,
+            ct));
 
-            logger.LogInformation("Download batch finished: {ResultCount} results", results.Count);
-        }
+        var results = (await Task.WhenAll(tasks)).ToList();
+
+        logger.LogInformation("Download batch finished: {ResultCount} results", results.Count);
 
         return results;
+    }
+
+    private async Task<DownloadResult> DownloadWithThrottleAsync(SemaphoreSlim semaphore,
+                                                                 HttpClient client,
+                                                                 string address,
+                                                                 string outputPath,
+                                                                 string? requestId,
+                                                                 CancellationToken ct) {
+        await semaphore.WaitAsync(ct);
+        try {
+            return await DownloadFileAsync(client, address, outputPath, requestId, ct);
+        }
+        catch (Exception ex) {
+            logger.LogError(ex, "Download failed for {Url}", address);
+            var failed = new DownloadResult(
+                Url: address,
+                FilePath: outputPath,
+                BeginTime: TimeProvider.System.GetLocalNow(),
+                EndTime: TimeProvider.System.GetLocalNow(),
+                FileSize: 0,
+                AVGDownloadSpeed: "",
+                Status: nameof(Status.Failed),
+                ErrorMSG: ex.Message,
+                RequestId: requestId);
+            await eventBus.PublishAsync(failed, CancellationToken.None);
+            return failed;
+        }
+        finally {
+            semaphore.Release();
+        }
     }
 
     private async Task<DownloadResult> DownloadFileAsync(

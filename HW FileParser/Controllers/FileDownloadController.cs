@@ -12,18 +12,15 @@ public class FileDownloadController(
     [HttpPost]
     public async Task<ActionResult<IReadOnlyCollection<DownloadResult>>> DownloadFiles(
         [FromBody] UrlsRequest addresses,
-        CancellationToken ct)
-    {
+        CancellationToken ct) {
         if (hostApplicationLifetime.ApplicationStopping.IsCancellationRequested) {
             return Problem(
                 detail: "Сервис завершает работу и не принимает новые задачи.",
                 statusCode: StatusCodes.Status503ServiceUnavailable);
         }
 
-        var request = addresses with {
-            RequestId = addresses.RequestId ?? HttpContext.TraceIdentifier
-        };
-        var result = await downloadService.DownloadFileAsync(request, ct);
-        return Ok(result);
+        var request = addresses with { RequestId = addresses.RequestId ?? HttpContext.TraceIdentifier };
+
+        return Ok(await downloadService.DownloadFileAsync(request, ct));
     }
 }
